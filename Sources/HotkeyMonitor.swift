@@ -17,6 +17,8 @@ final class HotkeyMonitor {
     private let handler: (Event) -> Void
     private var tap: CFMachPort?
 
+    var isRunning: Bool { tap != nil }
+
     init(handler: @escaping (Event) -> Void) {
         self.handler = handler
     }

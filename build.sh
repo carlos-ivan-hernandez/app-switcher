@@ -13,7 +13,11 @@ swiftc -O -swift-version 5 \
     -framework AppKit -framework Carbon
 
 cp Info.plist "$APP/Contents/Info.plist"
-codesign --force --sign - "$APP"
+# Ad-hoc signatures change with every build, and macOS ties privacy grants to the
+# signature. Pinning the requirement to the bundle ID keeps the Accessibility grant
+# valid across rebuilds.
+BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" Info.plist)
+codesign --force --sign - --requirements "=designated => identifier \"$BUNDLE_ID\"" "$APP"
 
 echo "Built $APP"
 

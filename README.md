@@ -11,8 +11,12 @@ A native macOS replacement for Cmd+Tab that shows open apps as a vertical list (
 On first launch, grant **Accessibility** access in System Settings → Privacy & Security → Accessibility.
 The app picks it up within a second, no relaunch needed. Quit it from the menu bar icon.
 
-Because the build is ad-hoc signed, macOS treats each rebuild as a new app: after rebuilding,
-remove the old App Switcher entry from the Accessibility list and turn it on again.
+The build is signed with a fixed identity (the bundle ID), so the permission survives rebuilds.
+
+If it isn't working, the menu bar icon names the missing permission (Accessibility or
+Input Monitoring) and links to its settings page. If App Switcher looks enabled but the menu
+still says Accessibility is missing, the entry is from an older build: remove it with − and
+add the app again, or run `tccutil reset Accessibility local.carlos.appswitcher`.
 
 ## Modes
 
