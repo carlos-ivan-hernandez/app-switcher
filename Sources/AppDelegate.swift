@@ -32,6 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .previous: switcher.previous()
         case .commit: switcher.commit()
         case .cancel: switcher.cancel()
+        case .commandReleased: switcher.commandReleased()
+        case .type(let text): switcher.type(text)
+        case .deleteBackward: switcher.deleteBackward()
         }
         hotkeys.isSwitching = switcher.isActive
     }
@@ -46,12 +49,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.isEnabled = false
         menu.addItem(status)
         menu.addItem(.separator())
+        let modeHeader = NSMenuItem(title: "Mode", action: nil, keyEquivalent: "")
+        modeHeader.isEnabled = false
+        menu.addItem(modeHeader)
+        for mode in SwitcherMode.allCases {
+            let item = NSMenuItem(title: mode.title, action: #selector(selectMode(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = mode.rawValue
+            item.state = mode == switcher.mode ? .on : .off
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
         let settings = NSMenuItem(title: "Open Accessibility Settings…", action: #selector(openAccessibilitySettings), keyEquivalent: "")
         settings.target = self
         menu.addItem(settings)
         menu.addItem(NSMenuItem(title: "Quit App Switcher", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         item.menu = menu
         statusItem = item
+    }
+
+    @objc private func selectMode(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let mode = SwitcherMode(rawValue: raw) else { return }
+        switcher.cancel()
+        hotkeys.isSwitching = false
+        switcher.mode = mode
+        for item in sender.menu?.items ?? [] where item.action == #selector(selectMode(_:)) {
+            item.state = (item.representedObject as? String) == raw ? .on : .off
+        }
     }
 
     @objc private func openAccessibilitySettings() {

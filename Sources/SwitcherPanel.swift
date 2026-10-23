@@ -3,8 +3,11 @@ import AppKit
 private enum Layout {
     static let width: CGFloat = 320
     static let rowHeight: CGFloat = 40
+    static let rowSpacing: CGFloat = 2
     static let iconSize: CGFloat = 28
     static let padding: CGFloat = 8
+    static let searchHeight: CGFloat = 32
+    static let sectionSpacing: CGFloat = 6
 }
 
 /// Floating, non-activating window that lists apps vertically.
@@ -12,8 +15,10 @@ final class SwitcherPanel: NSPanel {
     var onHover: ((Int) -> Void)?
     var onClick: ((Int) -> Void)?
 
+    private let searchBar = SearchBarView()
     private let scrollView = NSScrollView()
     private let stack = NSStackView()
+    private let emptyLabel = NSTextField(labelWithString: "No matching apps")
     private var rows: [AppRowView] = []
 
     init() {
@@ -35,7 +40,7 @@ final class SwitcherPanel: NSPanel {
         contentView = background
 
         stack.orientation = .vertical
-        stack.spacing = 2
+        stack.spacing = Layout.rowSpacing
         stack.alignment = .leading
         stack.translatesAutoresizingMaskIntoConstraints = false
 
@@ -48,26 +53,62 @@ final class SwitcherPanel: NSPanel {
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.translatesAutoresizingMaskIntoConstraints = false
-        background.addSubview(scrollView)
+
+        emptyLabel.textColor = .secondaryLabelColor
+        emptyLabel.alignment = .center
+        emptyLabel.translatesAutoresizingMaskIntoConstraints = false
+        emptyLabel.isHidden = true
+        scrollView.addSubview(emptyLabel)
+
+        // Search bar on top (hidden in classic mode), list below.
+        let column = NSStackView(views: [searchBar, scrollView])
+        column.orientation = .vertical
+        column.spacing = Layout.sectionSpacing
+        column.translatesAutoresizingMaskIntoConstraints = false
+        background.addSubview(column)
 
         let p = Layout.padding
         NSLayoutConstraint.activate([
-            scrollView.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: p),
-            scrollView.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -p),
-            scrollView.topAnchor.constraint(equalTo: background.topAnchor, constant: p),
-            scrollView.bottomAnchor.constraint(equalTo: background.bottomAnchor, constant: -p),
+            column.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: p),
+            column.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -p),
+            column.topAnchor.constraint(equalTo: background.topAnchor, constant: p),
+            column.bottomAnchor.constraint(equalTo: background.bottomAnchor, constant: -p),
+            searchBar.widthAnchor.constraint(equalTo: column.widthAnchor),
+            searchBar.heightAnchor.constraint(equalToConstant: Layout.searchHeight),
+            scrollView.widthAnchor.constraint(equalTo: column.widthAnchor),
             document.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
             stack.leadingAnchor.constraint(equalTo: document.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: document.trailingAnchor),
             stack.topAnchor.constraint(equalTo: document.topAnchor),
             stack.bottomAnchor.constraint(equalTo: document.bottomAnchor),
+            emptyLabel.centerXAnchor.constraint(equalTo: scrollView.centerXAnchor),
+            emptyLabel.topAnchor.constraint(equalTo: scrollView.topAnchor, constant: 12),
         ])
     }
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    func show(apps: [NSRunningApplication], selected: Int) {
+    /// Sizes and shows the panel for the full list. Filtering later keeps this size.
+    func show(apps: [NSRunningApplication], selected: Int, searching: Bool) {
+        searchBar.isHidden = !searching
+        searchBar.query = ""
+
+        let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
+        let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
+        let listHeight = CGFloat(apps.count) * Layout.rowHeight + CGFloat(max(apps.count - 1, 0)) * Layout.rowSpacing
+        let searchHeight = searching ? Layout.searchHeight + Layout.sectionSpacing : 0
+        let height = min(listHeight + searchHeight + Layout.padding * 2, visible.height * 0.8)
+        setFrame(NSRect(x: visible.midX - Layout.width / 2, y: visible.midY - height / 2,
+                        width: Layout.width, height: height), display: false)
+
+        reload(apps: apps, selected: selected, query: "")
+        orderFrontRegardless()
+    }
+
+    /// Replaces the rows, e.g. after the filter changes.
+    func reload(apps: [NSRunningApplication], selected: Int, query: String) {
+        searchBar.query = query
         rows.forEach { $0.removeFromSuperview() }
         rows = apps.enumerated().map { index, app in
             let row = AppRowView(app: app)
@@ -77,21 +118,8 @@ final class SwitcherPanel: NSPanel {
             row.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
             return row
         }
-
-        // Size to fit the list, capped to the screen the mouse is on.
-        let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
-        let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
-        let contentHeight = CGFloat(rows.count) * Layout.rowHeight + CGFloat(max(rows.count - 1, 0)) * stack.spacing
-        let height = min(contentHeight + Layout.padding * 2, visible.height * 0.8)
-        let frame = NSRect(
-            x: visible.midX - Layout.width / 2,
-            y: visible.midY - height / 2,
-            width: Layout.width,
-            height: height
-        )
-        setFrame(frame, display: true)
+        emptyLabel.isHidden = !apps.isEmpty
         setSelected(selected)
-        orderFrontRegardless()
     }
 
     func setSelected(_ index: Int) {
@@ -105,6 +133,55 @@ final class SwitcherPanel: NSPanel {
 
 private final class FlippedView: NSView {
     override var isFlipped: Bool { true }
+}
+
+/// Shows what the user has typed. It is a plain label: keys arrive through the
+/// event tap, so the panel never needs keyboard focus.
+private final class SearchBarView: NSView {
+    private let label = NSTextField(labelWithString: "")
+
+    var query = "" {
+        didSet { update() }
+    }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
+        translatesAutoresizingMaskIntoConstraints = false
+
+        let icon = NSImageView(image: NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Search")!)
+        icon.contentTintColor = .secondaryLabelColor
+        icon.translatesAutoresizingMaskIntoConstraints = false
+
+        label.font = .systemFont(ofSize: 14)
+        label.lineBreakMode = .byTruncatingHead
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(icon)
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            icon.centerYAnchor.constraint(equalTo: centerYAnchor),
+            label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 8),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        update()
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    private func update() {
+        if query.isEmpty {
+            label.stringValue = "Type to filter apps"
+            label.textColor = .tertiaryLabelColor
+        } else {
+            label.stringValue = query
+            label.textColor = .labelColor
+        }
+    }
 }
 
 /// One row: icon on the left, app name on the right.

@@ -1,12 +1,40 @@
 import AppKit
 
+enum SwitcherMode: String, CaseIterable {
+    /// Hold Cmd, press Tab to move, release Cmd to switch.
+    case classic
+    /// List stays open; type to filter, arrows to move, Enter to switch.
+    case search
+
+    var title: String {
+        switch self {
+        case .classic: return "Classic: release ⌘ to switch"
+        case .search: return "Search: type to filter, Enter to switch"
+        }
+    }
+
+    private static let defaultsKey = "SwitcherMode"
+
+    static var saved: SwitcherMode {
+        get { UserDefaults.standard.string(forKey: defaultsKey).flatMap(SwitcherMode.init) ?? .classic }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: defaultsKey) }
+    }
+}
+
 /// Holds switcher state and decides what to show and activate.
 final class SwitcherController {
+    var mode: SwitcherMode = .saved {
+        didSet { SwitcherMode.saved = mode }
+    }
+
     private let tracker: AppTracker
     private let panel = SwitcherPanel()
+    private var allApps: [NSRunningApplication] = []
     private var apps: [NSRunningApplication] = []
+    private var query = ""
     private var selected = 0
     private var pendingShow: DispatchWorkItem?
+    private var clickOutsideMonitor: Any?
 
     private(set) var isActive = false
 
@@ -27,6 +55,22 @@ final class SwitcherController {
         if begin() { select(apps.count - 1) } else { select(selected - 1) }
     }
 
+    func commandReleased() {
+        if mode == .classic { commit() }
+    }
+
+    func type(_ text: String) {
+        guard isActive, mode == .search else { return }
+        query += text
+        applyFilter()
+    }
+
+    func deleteBackward() {
+        guard isActive, mode == .search, !query.isEmpty else { return }
+        query.removeLast()
+        applyFilter()
+    }
+
     func commit() {
         guard isActive else { return }
         let app = apps.indices.contains(selected) ? apps[selected] : nil
@@ -41,17 +85,32 @@ final class SwitcherController {
     /// Starts a switch session. Returns true if one was just started.
     private func begin() -> Bool {
         guard !isActive else { return false }
-        apps = tracker.apps()
+        allApps = tracker.apps()
+        apps = allApps
+        query = ""
         guard !apps.isEmpty else { return false }
         isActive = true
 
-        // Like the system switcher, a quick Cmd+Tab flips apps without flashing the UI.
-        let show = DispatchWorkItem { [weak self] in
-            guard let self, self.isActive else { return }
-            self.panel.show(apps: self.apps, selected: self.selected)
+        switch mode {
+        case .classic:
+            // Like the system switcher, a quick Cmd+Tab flips apps without flashing the UI.
+            let show = DispatchWorkItem { [weak self] in
+                guard let self, self.isActive else { return }
+                self.panel.show(apps: self.apps, selected: self.selected, searching: false)
+            }
+            pendingShow = show
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: show)
+
+        case .search:
+            // Show right away (after the caller sets the selection) and close on clicks elsewhere.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isActive else { return }
+                self.panel.show(apps: self.apps, selected: self.selected, searching: true)
+            }
+            clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+                self?.cancel()
+            }
         }
-        pendingShow = show
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: show)
         return true
     }
 
@@ -59,13 +118,46 @@ final class SwitcherController {
         isActive = false
         pendingShow?.cancel()
         pendingShow = nil
+        if let monitor = clickOutsideMonitor {
+            NSEvent.removeMonitor(monitor)
+            clickOutsideMonitor = nil
+        }
         panel.orderOut(nil)
+    }
+
+    private func applyFilter() {
+        apps = Self.filter(allApps, by: query)
+        selected = 0
+        panel.reload(apps: apps, selected: selected, query: query)
     }
 
     private func select(_ index: Int) {
         guard !apps.isEmpty else { return }
         selected = (index % apps.count + apps.count) % apps.count
         panel.setSelected(selected)
+    }
+
+    /// Keeps apps whose name matches the query, best matches first
+    /// (name prefix, then word prefix, then substring, then letters in order).
+    private static func filter(_ apps: [NSRunningApplication], by query: String) -> [NSRunningApplication] {
+        let needle = query.lowercased().trimmingCharacters(in: .whitespaces)
+        guard !needle.isEmpty else { return apps }
+
+        func score(_ app: NSRunningApplication) -> Int? {
+            let name = (app.localizedName ?? "").lowercased()
+            if name.hasPrefix(needle) { return 0 }
+            let words = name.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            if words.contains(where: { $0.hasPrefix(needle) }) { return 1 }
+            if name.contains(needle) { return 2 }
+            var rest = Substring(needle)
+            for char in name where char == rest.first { rest.removeFirst() }
+            return rest.isEmpty ? 3 : nil
+        }
+
+        return apps.enumerated()
+            .compactMap { index, app in score(app).map { (score: $0, index: index, app: app) } }
+            .sorted { ($0.score, $0.index) < ($1.score, $1.index) }
+            .map(\.app)
     }
 
     private func activate(_ app: NSRunningApplication) {

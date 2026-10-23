@@ -4,7 +4,12 @@ import Carbon.HIToolbox
 /// Intercepts Cmd+Tab (and related keys while switching) with a CGEvent tap,
 /// so the system switcher never sees them.
 final class HotkeyMonitor {
-    enum Event { case next, previous, commit, cancel }
+    enum Event {
+        case next, previous, commit, cancel
+        case commandReleased
+        case type(String)
+        case deleteBackward
+    }
 
     /// Set by the owner: true while the switcher is open.
     var isSwitching = false
@@ -70,7 +75,9 @@ final class HotkeyMonitor {
                 case kVK_Return, kVK_ANSI_KeypadEnter: emit(.commit)
                 case kVK_UpArrow, kVK_LeftArrow: emit(.previous)
                 case kVK_DownArrow, kVK_RightArrow: emit(.next)
-                default: break
+                case kVK_Delete: emit(.deleteBackward)
+                default:
+                    if !flags.contains(.maskControl), let text = Self.typedText(event) { emit(.type(text)) }
                 }
                 return nil // swallow everything else while the switcher is open
             }
@@ -79,11 +86,22 @@ final class HotkeyMonitor {
             if isSwitching || (command && keyCode == kVK_Tab) { return nil }
 
         case .flagsChanged:
-            if isSwitching && !command { emit(.commit) }
+            if isSwitching && !command { emit(.commandReleased) }
 
         default:
             break
         }
         return Unmanaged.passUnretained(event)
+    }
+
+    /// The printable text a key press would type, if any.
+    private static func typedText(_ event: CGEvent) -> String? {
+        var length = 0
+        var chars = [UniChar](repeating: 0, count: 4)
+        event.keyboardGetUnicodeString(maxStringLength: chars.count, actualStringLength: &length, unicodeString: &chars)
+        let text = String(utf16CodeUnits: chars, count: length)
+        guard !text.isEmpty,
+              text.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }) else { return nil }
+        return text
     }
 }
