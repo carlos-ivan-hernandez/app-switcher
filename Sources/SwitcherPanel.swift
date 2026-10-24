@@ -33,7 +33,10 @@ final class SwitcherPanel: NSPanel {
         contentView = list
     }
 
-    override var canBecomeKey: Bool { false }
+    // Glass draws its flat, inactive look unless its window is key. The panel is
+    // non-activating, so becoming key doesn't take focus from the frontmost app,
+    // and the event tap swallows every key press while the switcher is open.
+    override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
     /// Sizes and shows the panel for the full list. Filtering later keeps this size.
@@ -49,6 +52,7 @@ final class SwitcherPanel: NSPanel {
         list.reload(apps: apps, selected: selected, query: "")
         hasShadow = Appearance.wantsWindowShadow
         orderFrontRegardless()
+        makeKey()
         invalidateShadow()
     }
 

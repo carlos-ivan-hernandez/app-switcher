@@ -38,7 +38,10 @@ final class WheelPanel: NSPanel {
         contentView = wheel
     }
 
-    override var canBecomeKey: Bool { false }
+    // Glass draws its flat, inactive look unless its window is key. The panel is
+    // non-activating, so becoming key doesn't take focus from the frontmost app,
+    // and the event tap swallows every key press while the switcher is open.
+    override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
     func show(apps: [NSRunningApplication], selected: Int) {
@@ -50,6 +53,7 @@ final class WheelPanel: NSPanel {
         setFrame(NSRect(x: visible.midX - side / 2, y: visible.midY - side / 2, width: side, height: side), display: false)
         hasShadow = Appearance.wantsWindowShadow
         orderFrontRegardless()
+        makeKey()
         invalidateShadow()
     }
 
