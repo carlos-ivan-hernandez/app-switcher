@@ -9,19 +9,27 @@ or as a wheel of icons.
 ./build.sh --run
 ```
 
+Every build installs to `/Applications/AppSwitcher.app`, replacing the old copy. If App
+Switcher was running, it's quit and reopened; `--run` opens it even if it wasn't.
+
 On first launch, grant **Accessibility** access in System Settings → Privacy & Security → Accessibility.
-The app picks it up within a second, no relaunch needed. Quit it from the menu bar icon.
+The app picks it up within a second, no relaunch needed.
 
 The build is signed with a fixed identity (the bundle ID), so the permission survives rebuilds.
 
-If it isn't working, the menu bar icon names the missing permission (Accessibility or
-Input Monitoring) and links to its settings page. If App Switcher looks enabled but the menu
+If it isn't working, the settings window names the missing permission (Accessibility or
+Input Monitoring) and links to its settings page. If App Switcher looks enabled but the window
 still says Accessibility is missing, the entry is from an older build: remove it with − and
 add the app again, or run `tccutil reset Accessibility local.carlos.appswitcher`.
 
-## Modes
+## Settings
 
-Pick a mode from the menu bar icon. The choice is remembered.
+Click the menu bar icon to open the settings window. It shows whether Cmd+Tab is active,
+lets you pick the mode and appearance, and previews the switcher with the apps you have
+open, drawn over your desktop wallpaper. Changes are remembered. Quit App Switcher from
+this window too.
+
+## Modes
 
 - **Classic**: hold Cmd, tap Tab to move, release Cmd to switch.
 - **Search**: Cmd+Tab opens the list and it stays open. Type to filter, use the arrow
@@ -29,12 +37,14 @@ Pick a mode from the menu bar icon. The choice is remembered.
 - **Wheel**: works like Classic, but the icons are arranged in a circle, going clockwise from
   the top, with the selected app's name in the middle. The wheel grows with the number of apps.
 
-### Wheel background
+## Appearance
 
-Under **Wheel Background** in the menu bar icon, pick how the wheel's background looks:
-**Blur**, **Liquid Glass**, **Clear Glass** (both need macOS 26 or later) or **Solid**.
-The **Opacity** slider fades the background from 100% down to 0% (icons only); the icons
-themselves stay fully visible.
+Applies to every mode:
+
+- **Background**: **Blur**, **Liquid Glass**, **Clear Glass** (both need macOS 26 or later)
+  or **Solid**. With Reduce Transparency on (Accessibility → Display), macOS draws glass and
+  blur as solid colors.
+- **Opacity**: fades the background from 100% down to 0%; icons and names stay fully visible.
 
 ## Keys (Classic and Wheel modes)
 

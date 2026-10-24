@@ -10,34 +10,74 @@ private enum Layout {
     static let sectionSpacing: CGFloat = 6
 }
 
-/// Floating, non-activating window that lists apps vertically.
+/// Floating, non-activating window that shows the app list in the middle of the screen.
 final class SwitcherPanel: NSPanel {
-    var onHover: ((Int) -> Void)?
-    var onClick: ((Int) -> Void)?
+    var onHover: ((Int) -> Void)? {
+        get { list.onHover }
+        set { list.onHover = newValue }
+    }
+    var onClick: ((Int) -> Void)? {
+        get { list.onClick }
+        set { list.onClick = newValue }
+    }
 
-    private let searchBar = SearchBarView()
-    private let scrollView = NSScrollView()
-    private let stack = NSStackView()
-    private let emptyLabel = NSTextField(labelWithString: "No matching apps")
-    private var rows: [AppRowView] = []
+    private let list = SwitcherListView(blending: .behindWindow)
 
     init() {
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
         level = .popUpMenu
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
         hidesOnDeactivate = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
+        contentView = list
+    }
 
-        let background = NSVisualEffectView()
-        background.material = .hudWindow
-        background.blendingMode = .behindWindow
-        background.state = .active
-        background.wantsLayer = true
-        background.layer?.cornerRadius = 14
-        background.layer?.masksToBounds = true
-        contentView = background
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+
+    /// Sizes and shows the panel for the full list. Filtering later keeps this size.
+    func show(apps: [NSRunningApplication], selected: Int, searching: Bool) {
+        let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
+        let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
+        let size = SwitcherListView.preferredSize(appCount: apps.count, searching: searching,
+                                                  maxHeight: visible.height * 0.8)
+        setFrame(NSRect(x: visible.midX - size.width / 2, y: visible.midY - size.height / 2,
+                        width: size.width, height: size.height), display: false)
+
+        list.configure(searching: searching)
+        list.reload(apps: apps, selected: selected, query: "")
+        hasShadow = Appearance.wantsWindowShadow
+        orderFrontRegardless()
+        invalidateShadow()
+    }
+
+    func reload(apps: [NSRunningApplication], selected: Int, query: String) {
+        list.reload(apps: apps, selected: selected, query: query)
+    }
+
+    func setSelected(_ index: Int) {
+        list.setSelected(index)
+    }
+}
+
+/// Apps listed vertically, with an optional search bar on top. Used by the floating
+/// panel and the settings preview.
+final class SwitcherListView: NSView {
+    var onHover: ((Int) -> Void)?
+    var onClick: ((Int) -> Void)?
+
+    private let blending: NSVisualEffectView.BlendingMode
+    private var background: NSView?
+    private let searchBar = SearchBarView()
+    private let scrollView = NSScrollView()
+    private let stack = NSStackView()
+    private let emptyLabel = NSTextField(labelWithString: "No matching apps")
+    private var rows: [AppRowView] = []
+
+    init(blending: NSVisualEffectView.BlendingMode) {
+        self.blending = blending
+        super.init(frame: .zero)
 
         stack.orientation = .vertical
         stack.spacing = Layout.rowSpacing
@@ -65,14 +105,14 @@ final class SwitcherPanel: NSPanel {
         column.orientation = .vertical
         column.spacing = Layout.sectionSpacing
         column.translatesAutoresizingMaskIntoConstraints = false
-        background.addSubview(column)
+        addSubview(column)
 
         let p = Layout.padding
         NSLayoutConstraint.activate([
-            column.leadingAnchor.constraint(equalTo: background.leadingAnchor, constant: p),
-            column.trailingAnchor.constraint(equalTo: background.trailingAnchor, constant: -p),
-            column.topAnchor.constraint(equalTo: background.topAnchor, constant: p),
-            column.bottomAnchor.constraint(equalTo: background.bottomAnchor, constant: -p),
+            column.leadingAnchor.constraint(equalTo: leadingAnchor, constant: p),
+            column.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -p),
+            column.topAnchor.constraint(equalTo: topAnchor, constant: p),
+            column.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -p),
             searchBar.widthAnchor.constraint(equalTo: column.widthAnchor),
             searchBar.heightAnchor.constraint(equalToConstant: Layout.searchHeight),
             scrollView.widthAnchor.constraint(equalTo: column.widthAnchor),
@@ -86,24 +126,26 @@ final class SwitcherPanel: NSPanel {
         ])
     }
 
-    override var canBecomeKey: Bool { false }
-    override var canBecomeMain: Bool { false }
+    required init?(coder: NSCoder) { fatalError("not used") }
 
-    /// Sizes and shows the panel for the full list. Filtering later keeps this size.
-    func show(apps: [NSRunningApplication], selected: Int, searching: Bool) {
+    /// The size that fits every app, but no taller than `maxHeight`.
+    static func preferredSize(appCount: Int, searching: Bool, maxHeight: CGFloat) -> NSSize {
+        let listHeight = CGFloat(appCount) * Layout.rowHeight + CGFloat(max(appCount - 1, 0)) * Layout.rowSpacing
+        let searchHeight = searching ? Layout.searchHeight + Layout.sectionSpacing : 0
+        return NSSize(width: Layout.width, height: min(listHeight + searchHeight + Layout.padding * 2, maxHeight))
+    }
+
+    /// Shows or hides the search bar and applies the saved appearance. Call after sizing the view.
+    func configure(searching: Bool) {
         searchBar.isHidden = !searching
         searchBar.query = ""
 
-        let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
-        let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
-        let listHeight = CGFloat(apps.count) * Layout.rowHeight + CGFloat(max(apps.count - 1, 0)) * Layout.rowSpacing
-        let searchHeight = searching ? Layout.searchHeight + Layout.sectionSpacing : 0
-        let height = min(listHeight + searchHeight + Layout.padding * 2, visible.height * 0.8)
-        setFrame(NSRect(x: visible.midX - Layout.width / 2, y: visible.midY - height / 2,
-                        width: Layout.width, height: height), display: false)
-
-        reload(apps: apps, selected: selected, query: "")
-        orderFrontRegardless()
+        background?.removeFromSuperview()
+        let newBackground = Appearance.makeBackground(shape: .roundedRect(radius: 14), size: bounds.size,
+                                                      blending: blending)
+        newBackground.autoresizingMask = [.width, .height]
+        addSubview(newBackground, positioned: .below, relativeTo: nil)
+        background = newBackground
     }
 
     /// Replaces the rows, e.g. after the filter changes.
@@ -125,7 +167,7 @@ final class SwitcherPanel: NSPanel {
     func setSelected(_ index: Int) {
         for (i, row) in rows.enumerated() { row.isSelected = (i == index) }
         if rows.indices.contains(index) {
-            layoutIfNeeded()
+            layoutSubtreeIfNeeded()
             rows[index].scrollToVisible(rows[index].bounds)
         }
     }

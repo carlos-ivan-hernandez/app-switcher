@@ -10,9 +10,17 @@ enum SwitcherMode: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .classic: return "Classic: release ⌘ to switch"
-        case .search: return "Search: type to filter, Enter to switch"
-        case .wheel: return "Wheel: icons in a circle, release ⌘ to switch"
+        case .classic: return "Classic"
+        case .search: return "Search"
+        case .wheel: return "Wheel"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .classic: return "Hold ⌘ and tap Tab to move down the list. Let go of ⌘ to switch."
+        case .search: return "⌘+Tab opens the list and keeps it open. Type to filter, use the arrow keys to move, and press Return to switch."
+        case .wheel: return "Like Classic, but the icons are arranged in a circle with the selected app's name in the middle."
         }
     }
 
