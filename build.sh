@@ -1,9 +1,11 @@
 #!/bin/bash
-# Builds build/AppSwitcher.app. Pass --run to launch it afterwards.
+# Builds AppSwitcher.app and installs it to /Applications, replacing any older copy.
+# A copy that was running is quit and reopened. Pass --run to open it even if it wasn't running.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 APP="build/AppSwitcher.app"
+INSTALLED="/Applications/AppSwitcher.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 
@@ -21,7 +23,18 @@ codesign --force --sign - --requirements "=designated => identifier \"$BUNDLE_ID
 
 echo "Built $APP"
 
-if [[ "${1:-}" == "--run" ]]; then
+# Quit the running copy before replacing it, so the old version doesn't keep running.
+WAS_RUNNING=false
+if pgrep -x AppSwitcher >/dev/null; then
+    WAS_RUNNING=true
     pkill -x AppSwitcher || true
-    open "$APP"
+    while pgrep -x AppSwitcher >/dev/null; do sleep 0.1; done
+fi
+
+rm -rf "$INSTALLED"
+ditto "$APP" "$INSTALLED"
+echo "Installed $INSTALLED"
+
+if [[ "$WAS_RUNNING" == true || "${1:-}" == "--run" ]]; then
+    open "$INSTALLED"
 fi
