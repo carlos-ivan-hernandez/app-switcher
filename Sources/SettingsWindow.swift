@@ -213,6 +213,10 @@ final class SettingsWindowController: NSWindowController {
         }
         opacitySlider.doubleValue = Appearance.opacity * 100
         opacityValue.stringValue = "\(Int((Appearance.opacity * 100).rounded()))%"
+        let opacityEnabled = Appearance.style.supportsOpacity
+        opacitySlider.isEnabled = opacityEnabled
+        opacityValue.textColor = opacityEnabled ? .labelColor : .disabledControlTextColor
+        opacitySlider.toolTip = opacityEnabled ? nil : "Glass sets its own transparency. Try Clear Glass for a more see-through look."
         if let index = PreviewBackdrop.allCases.firstIndex(of: PreviewBackdrop.saved) {
             backdropPopup.selectItem(at: index)
         }
@@ -253,6 +257,7 @@ final class SettingsWindowController: NSWindowController {
         guard let raw = stylePopup.selectedItem?.representedObject as? String,
               let style = BackgroundStyle(rawValue: raw) else { return }
         Appearance.style = style
+        syncControls()
         refreshPreview()
     }
 

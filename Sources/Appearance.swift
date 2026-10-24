@@ -16,6 +16,12 @@ enum BackgroundStyle: String, CaseIterable {
         }
     }
 
+    /// Glass sets its own transparency (Clear Glass is the see-through one), and
+    /// fading it with alpha leaves a flat tint instead of glass.
+    var supportsOpacity: Bool {
+        self == .blur || self == .solid
+    }
+
     /// Liquid Glass needs macOS 26 or later.
     var isAvailable: Bool {
         switch self {
@@ -42,6 +48,7 @@ enum Appearance {
     }
 
     /// How opaque the background is, from 0 (invisible) to 1. Icons and text are not affected.
+    /// Glass ignores it: fading a glass view turns off its refraction and blur.
     static var opacity: Double {
         get { UserDefaults.standard.object(forKey: opacityKey) as? Double ?? 1 }
         set { UserDefaults.standard.set(min(max(newValue, 0), 1), forKey: opacityKey) }
@@ -50,7 +57,7 @@ enum Appearance {
     /// Whether a window showing the background should draw its own shadow.
     /// Glass draws one itself, and an invisible background has nothing to cast one.
     static var wantsWindowShadow: Bool {
-        (style == .blur || style == .solid) && opacity > 0
+        style.supportsOpacity && opacity > 0
     }
 }
 
@@ -104,7 +111,7 @@ extension Appearance {
                                blending: NSVisualEffectView.BlendingMode) -> NSView {
         let view = makeView(style: style, shape: shape, size: size, blending: blending)
         view.frame = NSRect(origin: .zero, size: size)
-        view.alphaValue = opacity
+        if style.supportsOpacity { view.alphaValue = opacity }
         return view
     }
 
