@@ -96,6 +96,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.state = mode == switcher.mode ? .on : .off
             menu.addItem(item)
         }
+        let wheelBackground = NSMenuItem(title: "Wheel Background", action: nil, keyEquivalent: "")
+        wheelBackground.submenu = makeWheelBackgroundMenu()
+        menu.addItem(wheelBackground)
         menu.addItem(.separator())
         let accessibility = NSMenuItem(title: "Open Accessibility Settings…", action: #selector(openAccessibilitySettings), keyEquivalent: "")
         accessibility.target = self
@@ -119,6 +122,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for item in sender.menu?.items ?? [] where item.action == #selector(selectMode(_:)) {
             item.state = (item.representedObject as? String) == raw ? .on : .off
         }
+    }
+
+    private static let opacityLabelTag = 10
+
+    /// Style choices, then an opacity slider.
+    private func makeWheelBackgroundMenu() -> NSMenu {
+        let menu = NSMenu()
+        for style in WheelBackground.allCases {
+            // Unavailable styles get no action, so the menu greys them out.
+            let item = NSMenuItem(title: style.title,
+                                  action: style.isAvailable ? #selector(selectWheelBackground(_:)) : nil,
+                                  keyEquivalent: "")
+            item.target = self
+            item.representedObject = style.rawValue
+            item.state = style == WheelBackground.saved ? .on : .off
+            if !style.isAvailable { item.toolTip = "Needs macOS 26 or later" }
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+
+        let label = NSMenuItem(title: Self.opacityTitle(WheelBackground.opacity), action: nil, keyEquivalent: "")
+        label.tag = Self.opacityLabelTag
+        label.isEnabled = false
+        menu.addItem(label)
+
+        let slider = NSSlider(value: WheelBackground.opacity * 100, minValue: 0, maxValue: 100,
+                              target: self, action: #selector(wheelOpacityChanged(_:)))
+        slider.isContinuous = true
+        slider.numberOfTickMarks = 21 // 5% steps
+        slider.allowsTickMarkValuesOnly = true
+        slider.frame = NSRect(x: 18, y: 2, width: 184, height: 24)
+        let sliderView = NSView(frame: NSRect(x: 0, y: 0, width: 220, height: 28))
+        sliderView.addSubview(slider)
+        let sliderItem = NSMenuItem()
+        sliderItem.view = sliderView
+        menu.addItem(sliderItem)
+        return menu
+    }
+
+    private static func opacityTitle(_ opacity: Double) -> String {
+        "Opacity: \(Int((opacity * 100).rounded()))%"
+    }
+
+    @objc private func selectWheelBackground(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let style = WheelBackground(rawValue: raw) else { return }
+        WheelBackground.saved = style
+        for item in sender.menu?.items ?? [] where item.action == #selector(selectWheelBackground(_:)) {
+            item.state = (item.representedObject as? String) == raw ? .on : .off
+        }
+    }
+
+    @objc private func wheelOpacityChanged(_ sender: NSSlider) {
+        WheelBackground.opacity = sender.doubleValue / 100
+        sender.enclosingMenuItem?.menu?.item(withTag: Self.opacityLabelTag)?.title =
+            Self.opacityTitle(WheelBackground.opacity)
     }
 
     @objc private func openAccessibilitySettings() {

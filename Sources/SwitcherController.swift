@@ -5,11 +5,14 @@ enum SwitcherMode: String, CaseIterable {
     case classic
     /// List stays open; type to filter, arrows to move, Enter to switch.
     case search
+    /// Like classic, but the icons are arranged in a wheel.
+    case wheel
 
     var title: String {
         switch self {
         case .classic: return "Classic: release ⌘ to switch"
         case .search: return "Search: type to filter, Enter to switch"
+        case .wheel: return "Wheel: icons in a circle, release ⌘ to switch"
         }
     }
 
@@ -29,6 +32,7 @@ final class SwitcherController {
 
     private let tracker: AppTracker
     private let panel = SwitcherPanel()
+    private let wheel = WheelPanel()
     private var allApps: [NSRunningApplication] = []
     private var apps: [NSRunningApplication] = []
     private var query = ""
@@ -45,6 +49,8 @@ final class SwitcherController {
             self?.select(index)
             self?.commit()
         }
+        wheel.onHover = panel.onHover
+        wheel.onClick = panel.onClick
     }
 
     func next() {
@@ -56,7 +62,7 @@ final class SwitcherController {
     }
 
     func commandReleased() {
-        if mode == .classic { commit() }
+        if mode != .search { commit() }
     }
 
     func type(_ text: String) {
@@ -92,11 +98,15 @@ final class SwitcherController {
         isActive = true
 
         switch mode {
-        case .classic:
+        case .classic, .wheel:
             // Like the system switcher, a quick Cmd+Tab flips apps without flashing the UI.
             let show = DispatchWorkItem { [weak self] in
                 guard let self, self.isActive else { return }
-                self.panel.show(apps: self.apps, selected: self.selected, searching: false)
+                if self.mode == .wheel {
+                    self.wheel.show(apps: self.apps, selected: self.selected)
+                } else {
+                    self.panel.show(apps: self.apps, selected: self.selected, searching: false)
+                }
             }
             pendingShow = show
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: show)
@@ -123,6 +133,7 @@ final class SwitcherController {
             clickOutsideMonitor = nil
         }
         panel.orderOut(nil)
+        wheel.orderOut(nil)
     }
 
     private func applyFilter() {
@@ -134,7 +145,7 @@ final class SwitcherController {
     private func select(_ index: Int) {
         guard !apps.isEmpty else { return }
         selected = (index % apps.count + apps.count) % apps.count
-        panel.setSelected(selected)
+        if mode == .wheel { wheel.setSelected(selected) } else { panel.setSelected(selected) }
     }
 
     /// Keeps apps whose name matches the query, best matches first

@@ -1,6 +1,7 @@
 # App Switcher
 
-A native macOS replacement for Cmd+Tab that shows open apps as a vertical list (icon + name).
+A native macOS replacement for Cmd+Tab that shows open apps as a vertical list (icon + name)
+or as a wheel of icons.
 
 ## Build and run
 
@@ -25,8 +26,17 @@ Pick a mode from the menu bar icon. The choice is remembered.
 - **Classic**: hold Cmd, tap Tab to move, release Cmd to switch.
 - **Search**: Cmd+Tab opens the list and it stays open. Type to filter, use the arrow
   keys to move, Enter to switch. Backspace edits the filter; Esc or clicking outside closes it.
+- **Wheel**: works like Classic, but the icons are arranged in a circle, going clockwise from
+  the top, with the selected app's name in the middle. The wheel grows with the number of apps.
 
-## Keys (Classic mode)
+### Wheel background
+
+Under **Wheel Background** in the menu bar icon, pick how the wheel's background looks:
+**Blur**, **Liquid Glass**, **Clear Glass** (both need macOS 26 or later) or **Solid**.
+The **Opacity** slider fades the background from 100% down to 0% (icons only); the icons
+themselves stay fully visible.
+
+## Keys (Classic and Wheel modes)
 
 | Key | Action |
 | --- | --- |
@@ -36,4 +46,4 @@ Pick a mode from the menu bar icon. The choice is remembered.
 | Release Cmd, or Return | Switch to the selected app |
 | Esc | Cancel |
 
-You can also hover and click a row.
+You can also hover over an app and click it.
