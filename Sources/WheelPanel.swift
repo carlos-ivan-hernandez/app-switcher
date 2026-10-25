@@ -44,6 +44,16 @@ final class WheelPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
+    // Clicking another window takes key status away, and glass would switch to its
+    // inactive look. Take it back while the panel is still on screen.
+    override func resignKey() {
+        super.resignKey()
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isVisible else { return }
+            self.makeKey()
+        }
+    }
+
     func show(apps: [NSRunningApplication], selected: Int) {
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
         let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)

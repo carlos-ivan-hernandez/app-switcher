@@ -39,6 +39,16 @@ final class SwitcherPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
+    // Clicking another window takes key status away, and glass would switch to its
+    // inactive look. Take it back while the panel is still on screen.
+    override func resignKey() {
+        super.resignKey()
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isVisible else { return }
+            self.makeKey()
+        }
+    }
+
     /// Sizes and shows the panel for the full list. Filtering later keeps this size.
     func show(apps: [NSRunningApplication], selected: Int, searching: Bool) {
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
