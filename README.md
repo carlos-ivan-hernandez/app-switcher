@@ -3,14 +3,15 @@
 A native macOS replacement for Cmd+Tab that shows open apps as a vertical list (icon + name)
 or as a wheel of icons.
 
-## Build and run
+## Build
 
 ```sh
-./build.sh --run
+./build.sh
 ```
 
-Every build installs to `/Applications/AppSwitcher.app`, replacing the old copy. If App
-Switcher was running, it's quit and reopened; `--run` opens it even if it wasn't.
+This makes `build/AppSwitcher.app`. Install it with App Installer
+(`~/main/dev/repos/app-installer`), which copies it into `/Applications`, quitting and reopening
+a copy that was running.
 
 On first launch, grant **Accessibility** access in System Settings → Privacy & Security → Accessibility.
 The app picks it up within a second, no relaunch needed.
